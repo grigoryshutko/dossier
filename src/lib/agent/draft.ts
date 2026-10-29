@@ -119,7 +119,8 @@ export async function draftCandidate(candidateId: string, context: JobContext): 
 /** Prepares one candidate's draft in the background (E16-5): from Prepare draft, or a run with auto-draft on. */
 export const agentDraftJob = defineJob({
   type: "agent-draft",
-  input: z.object({ candidateId: z.string().min(1) }),
+  input: z.object({ candidateId: z.string().min(1), background: z.boolean().optional() }),
+  isBackground: ({ background }) => background === true,
   result: z.object({ applicationId: z.string().min(1) }),
   run: async ({ candidateId }, context) => ({ applicationId: await draftCandidate(candidateId, context) }),
 });

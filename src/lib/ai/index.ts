@@ -11,6 +11,7 @@ import { LocalProvider } from "./providers/local";
 import { LmStudioProvider } from "./providers/lmstudio";
 import { MistralProvider } from "./providers/mistral";
 import { OpenAICompatibleProvider } from "./providers/openai-compatible";
+import { ChatGptPlanProvider } from "./providers/chatgpt-plan";
 
 export { AiError } from "./errors";
 export type { AIProvider, ChatMessage, CompletionRequest, JsonCompletionRequest } from "./provider";
@@ -18,6 +19,10 @@ export type { AIProvider, ChatMessage, CompletionRequest, JsonCompletionRequest 
 /** A provider for `config`. A saved key that can't be read stops hosted providers with a clear message. */
 export function createProvider(config: AiConfig): AIProvider {
   const { provider, baseUrl, model, apiKey, apiKeyProblem, timeoutMs } = config;
+  if (config.authSource === "chatgpt-plan") {
+    if (apiKeyProblem) throw AiError.config(apiKeyProblem);
+    return new ChatGptPlanProvider(model, timeoutMs);
+  }
   if (apiKeyProblem && providerOption(provider).apiKey) throw AiError.config(apiKeyProblem);
   switch (provider) {
     case AiProvider.LOCAL:

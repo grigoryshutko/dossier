@@ -11,6 +11,7 @@ const SIGNED_OUT_ACTIONS = new Map([
   ["src/lib/auth/actions.ts", ["signOut"]], // only clears the cookie
 ]);
 const OPEN_ROUTES = new Set([
+  "src/app/api/chatgpt-plan/import/route.ts", // one-use pairing capability, bounded body, verified OpenAI tokens
   "src/app/api/health/route.ts", // for health checks; says nothing private
   // Google's redirect comes from Google's site, so route()'s same-origin check
   // would refuse it; it checks the session and its signed state itself (E15-1).

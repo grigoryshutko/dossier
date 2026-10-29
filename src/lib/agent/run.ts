@@ -166,7 +166,7 @@ export async function runAgentScan({ manual }: { manual: boolean }, context: Job
       take: settings.agentMaxDrafts,
       select: { id: true },
     });
-    for (const { id } of best) await startJob(agentDraftJob, { candidateId: id }, { key: draftJobKey(id) });
+    for (const { id } of best) await startJob(agentDraftJob, { candidateId: id, ...(manual ? {} : { background: true }) }, { key: draftJobKey(id) });
     drafted = best.length;
   }
 

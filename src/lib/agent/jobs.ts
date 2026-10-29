@@ -14,5 +14,6 @@ export const agentScanJob = defineJob({
   type: "agent-scan",
   input: z.object({ manual: z.boolean() }),
   result: agentScanResultSchema,
+  isBackground: ({ manual }) => !manual,
   run: (input, context) => runAgentScan(input, context),
 });
