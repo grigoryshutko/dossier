@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -20,6 +20,10 @@ async function request<T>(path: string, body?: object): Promise<T> {
   return result as T;
 }
 
+const subscribeToOrigin = () => () => {};
+const browserOrigin = () => window.location.origin;
+const serverOrigin = () => "";
+
 export function ChatGptPlanSection({ initial, apiInitial }: { initial: ChatGptPlanView; apiInitial: AiSettingsView }) {
   const [view, setView] = useState(initial);
   const [choice, setChoice] = useState<"plan" | "api">(initial.enabled ? "plan" : "api");
@@ -28,8 +32,7 @@ export function ChatGptPlanSection({ initial, apiInitial }: { initial: ChatGptPl
   const [message, setMessage] = useState("");
   const [models, setModels] = useState<string[]>([]);
   const [labels, setLabels] = useState<Record<string, string>>({});
-  const [origin, setOrigin] = useState("");
-  useEffect(() => { setOrigin(window.location.origin); }, []);
+  const origin = useSyncExternalStore(subscribeToOrigin, browserOrigin, serverOrigin);
   const [modelsProblem, setModelsProblem] = useState("");
   const [testMessage, setTestMessage] = useState("");
 
@@ -134,7 +137,7 @@ export function ChatGptPlanSection({ initial, apiInitial }: { initial: ChatGptPl
         {view.needsReauth && <p role="alert">Your ChatGPT connection needs to be renewed. Follow the steps below to reconnect.</p>}
         <p className="font-medium">Connect your ChatGPT account</p>
         <p className="text-sm text-muted">For a personal VPS, first set up the local helper on the computer where you use your browser. This one-time setup completes sign-in locally and securely transfers the connection to your VPS.</p>
-        <ol className="list-decimal space-y-2 pl-5 text-sm"><li><a href="/api/chatgpt-plan/helper" className="underline" download>Download the sign-in helper</a>.</li><li>Run <code>node chatgpt-login.mjs --dossier-origin '{origin.replaceAll("'", "'\\''")}'</code> on your computer. The helper listens on 127.0.0.1:1455.</li><li>With the helper running, select Continue with ChatGPT and finish sign-in in the new tab.</li></ol>
+        <ol className="list-decimal space-y-2 pl-5 text-sm"><li><a href="/api/chatgpt-plan/helper" className="underline" download>Download the sign-in helper</a>.</li><li>Run <code>{`node chatgpt-login.mjs --dossier-origin '${origin.replaceAll("'", "'\\''")}'`}</code> on your computer. The helper listens on 127.0.0.1:1455.</li><li>With the helper running, select Continue with ChatGPT and finish sign-in in the new tab.</li></ol>
         <div className="flex flex-wrap gap-3"><Button disabled={busy || pending} onClick={() => void connect()}>Continue with ChatGPT</Button>{pending && <Button variant="secondary" disabled={busy} onClick={() => void cancel()}>Cancel</Button>}</div>
         {pending && <p role="status" className="text-sm text-muted">Waiting for sign-in to finish…</p>}
         {view.connected && <Button variant="secondary" disabled={busy} onClick={() => void disconnect()}>Disconnect account</Button>}
