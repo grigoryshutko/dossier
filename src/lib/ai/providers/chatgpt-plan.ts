@@ -73,7 +73,10 @@ export class ChatGptPlanProvider extends BaseProvider {
   }
 
   protected async chat(call: ChatCall): Promise<ChatAnswer> {
-    if (isAiBackgroundExecution()) await assertChatGptPlanBackgroundAllowed();
+    if (isAiBackgroundExecution()) {
+      try { await assertChatGptPlanBackgroundAllowed(); }
+      catch { throw AiError.config("Scheduled AI work is paused. Allow background ChatGPT plan use or reconnect in Settings → AI connection."); }
+    }
     const response = await request("/responses", call.signal, {
       method: "POST",
       body: JSON.stringify({ model: call.model, input: call.messages, instructions: call.json ? withJsonSchema(call.system, call.json.schema) : call.system, store: false, stream: true }),

@@ -61,7 +61,7 @@ describe("ChatGptPlanProvider", () => {
     vi.stubGlobal("fetch", fetchMock);
     const p = new ChatGptPlanProvider("model", 5000);
     await p.complete(call);
-    await expect(p.complete(call)).rejects.toBeDefined();
+    await expect(p.complete(call)).rejects.toMatchObject({ kind: "config", message: expect.stringContaining("background ChatGPT plan") });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
   it("maps caller cancellation and rejects empty and refusal responses", async () => {

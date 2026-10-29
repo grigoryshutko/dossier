@@ -7,6 +7,8 @@ import { createTestClient, resetDatabase } from "@/test/db";
 import { nextAgentRun, resetInterruptedDrafts, scheduledRunDue, startDueRun } from "./schedule";
 import { runLimitProblem } from "./runs";
 
+const plan = vi.hoisted(() => ({ enabled: false, connected: true, planAuthorized: true, needsReauth: false, allowBackground: true }));
+vi.mock("@/lib/chatgpt-plan", () => ({ getChatGptPlanView: async () => ({ ...plan }) }));
 const db = vi.hoisted(() => ({ client: undefined as ReturnType<typeof createTestClient> | undefined }));
 vi.mock("@/lib/prisma", async () => {
   const { createTestClient } = await import("@/test/db");
@@ -24,6 +26,7 @@ const prisma = () => db.client!;
 const run = (at: string, manual = false): AgentRun => ({ at, manual, message: null });
 
 beforeEach(async () => {
+  Object.assign(plan, { enabled: false, connected: true, planAuthorized: true, needsReauth: false, allowBackground: true });
   zone.value = "Europe/Berlin";
   await resetDatabase(prisma());
 });
@@ -84,6 +87,19 @@ describe("the limits (E16-4)", () => {
 });
 
 describe("the schedule (E16-4)", () => {
+  it("queues an overdue run after background consent is enabled", async () => {
+    const { startJob } = await import("@/lib/jobs/runner");
+    vi.mocked(startJob).mockClear();
+    await saveSettings({ agentEnabled: true });
+    Object.assign(plan, { enabled: true, allowBackground: false });
+    const due = new Date("2026-10-20T06:00:00Z");
+    expect(await startDueRun(due)).toBeNull();
+    expect(startJob).not.toHaveBeenCalled();
+    plan.allowBackground = true;
+    expect(await startDueRun(due)).toBe("agent-job");
+    expect(startJob).toHaveBeenCalledOnce();
+  });
+
   it("starts the day's run when it's due and the agent is on, once", async () => {
     const { startJob } = await import("@/lib/jobs/runner");
     const due = new Date("2026-10-20T06:00:00Z");
