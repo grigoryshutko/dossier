@@ -87,14 +87,14 @@ export async function importChatGptPlan(capability: string, value: unknown) {
     const access = await jwtVerify(c.accessToken, jwks, { issuer, audience: resource, algorithms: ["RS256"], requiredClaims: ["sub", "exp", "iat"], clockTolerance: 5 });
     if (access.payload.client_id !== c.clientId || typeof access.payload.scope !== "string" || ((c.scopes as string[]).includes(planScope) && !(access.payload.scope as string).split(" ").includes(planScope))) throw new Error("Invalid access token");
     const prior = s.credential || s.registration;
-    if (prior && (prior.subject !== id.payload.sub || prior.clientId !== c.clientId)) throw new Error("Disconnect before connecting another account");
+    if (prior && (prior.subject !== id.payload.sub || prior.clientId !== c.clientId)) throw new Error("This installation is registered to another ChatGPT account");
     s.credential = { clientId: c.clientId, subject: id.payload.sub, email: typeof id.payload.email === "string" ? id.payload.email : null, idToken: c.idToken, accessToken: c.accessToken, refreshToken: c.refreshToken, expiresAt: Math.min(c.expiresAt, access.payload.exp! * 1000), scopes: c.scopes as string[] };
     s.registration = { clientId: c.clientId, subject: id.payload.sub, email: s.credential.email };
     s.enabled = (c.scopes as string[]).includes(planScope) && !!c.refreshToken; s.needsReauth = false; await write(s); return view(s);
   });
 }
 export async function saveChatGptPlanPreferences(p: { enabled?: boolean; model?: string | null; allowBackground?: boolean }) { return locked(async s => { if (p.enabled !== undefined) { if (p.enabled && (!s.credential || !s.credential.scopes.includes(planScope) || !s.credential.refreshToken)) throw new Error("Connect first"); s.enabled = p.enabled; } if (p.model !== undefined) { if (p.model !== null && (!/^[a-zA-Z0-9._-]{1,100}$/.test(p.model))) throw new Error("Invalid model"); s.model = p.model; } if (p.allowBackground !== undefined) s.allowBackground = p.allowBackground; await write(s); return view(s); }); }
-export async function disconnectChatGptPlan(): Promise<{ revocationConfirmed: boolean | null }> { return locked(async s => {
+export async function disconnectChatGptPlan({ forgetRegistration = false }: { forgetRegistration?: boolean } = {}): Promise<{ revocationConfirmed: boolean | null }> { return locked(async s => {
   let revocationConfirmed: boolean | null = null;
   if (s.credential?.refreshToken) {
     revocationConfirmed = false;
@@ -107,7 +107,7 @@ export async function disconnectChatGptPlan(): Promise<{ revocationConfirmed: bo
       if (attempt < 2) await new Promise(r => setTimeout(r, 250 * 2 ** attempt));
     }
   }
-  delete s.credential; delete s.pending; s.enabled = false; s.allowBackground = false; s.needsReauth = false; await write(s);
+  delete s.credential; delete s.pending; if (forgetRegistration) { delete s.registration; s.model = null; } s.enabled = false; s.allowBackground = false; s.needsReauth = false; await write(s);
   return { revocationConfirmed };
 }); }
 export async function assertChatGptPlanBackgroundAllowed() { const s = await getChatGptPlanView(); if (!s.connected || !s.enabled || !s.allowBackground || s.needsReauth) throw new Error("ChatGPT plan background use is not enabled"); }

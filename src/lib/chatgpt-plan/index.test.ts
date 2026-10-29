@@ -21,7 +21,7 @@ async function credentials(nonce: string, options: { idNonce?: string; idAudienc
 }
 async function pairing() { const url = new URL(await createChatGptPlanPairing("https://example.com")); const params = new URLSearchParams(url.hash.slice(1)); return { capability: params.get("capability")!, nonce: params.get("nonce")! }; }
 
-beforeEach(async () => { const pair = await generateKeyPair("RS256"); privateKey = pair.privateKey as CryptoKey; const jwk = await exportJWK(pair.publicKey); jwk.kid = "test"; keyState.resolve = createLocalJWKSet({ keys: [jwk] }) as unknown as typeof keyState.resolve; dir = await mkdtemp(path.join(tmpdir(), "dossier-plan-")); process.env.DOSSIER_DATA_DIR = dir; });
+beforeEach(async () => { vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 }))); const pair = await generateKeyPair("RS256"); privateKey = pair.privateKey as CryptoKey; const jwk = await exportJWK(pair.publicKey); jwk.kid = "test"; keyState.resolve = createLocalJWKSet({ keys: [jwk] }) as unknown as typeof keyState.resolve; dir = await mkdtemp(path.join(tmpdir(), "dossier-plan-")); process.env.DOSSIER_DATA_DIR = dir; });
 afterEach(async () => { delete process.env.DOSSIER_DATA_DIR; vi.unstubAllGlobals(); await rm(dir, { recursive: true, force: true }); });
 describe("ChatGPT plan pairing", () => {
   it("stores a stable VM host and never stores the pairing capability", async () => {
@@ -69,7 +69,7 @@ describe("credential validation and refresh", () => {
     ["expiry", { idExpired: true }],
     ["client", { accessClient: "oaiapp_other" }],
     ["plan scope", { accessScope: "openid offline_access resource.invoke" }],
-  ])("rejects a mismatched %s", async (_name, options) => {
+  ] satisfies [string, NonNullable<Parameters<typeof credentials>[1]>][])("rejects a mismatched %s", async (_name, options) => {
     const p = await pairing();
     await expect(importChatGptPlan(p.capability, await credentials(p.nonce, options))).rejects.toThrow();
     expect((await getChatGptPlanView()).connected).toBe(false);
@@ -77,6 +77,20 @@ describe("credential validation and refresh", () => {
   it("retains identity without enabling plan use when permission is absent", async () => {
     const p = await pairing(); const c = await credentials(p.nonce); c.scopes = ["openid", "offline_access", "resource.invoke"];
     await expect(importChatGptPlan(p.capability, c)).resolves.toMatchObject({ connected: true, planAuthorized: false, enabled: false });
+  });
+  it("does not authorize plan use without a refresh token", async () => {
+    const p = await pairing(); const c = await credentials(p.nonce); c.refreshToken = "";
+    await expect(importChatGptPlan(p.capability, c)).resolves.toMatchObject({ connected: true, planAuthorized: false, enabled: false });
+    const { saveChatGptPlanPreferences } = await import("./index");
+    await expect(saveChatGptPlanPreferences({ enabled: true })).rejects.toThrow("Connect first");
+  });
+  it("rejects a refresh response missing the plan permission", async () => {
+    const p = await pairing(); await importChatGptPlan(p.capability, await credentials(p.nonce, { expiresAt: Date.now() + 5000 }));
+    const replacement = await credentials(p.nonce);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ access_token: replacement.accessToken, refresh_token: "refresh-2", expires_in: 3600, scope: "openid" }), { status: 200 })));
+    const { getChatGptPlanAccessToken } = await import("./index");
+    await expect(getChatGptPlanAccessToken()).rejects.toThrow("Invalid refresh response");
+    expect((await getChatGptPlanView()).needsReauth).toBe(true);
   });
   it("serializes refresh and persists the replacement token", async () => {
     const p = await pairing(); const c = await credentials(p.nonce, { expiresAt: Date.now() + 5000 }); await importChatGptPlan(p.capability, c);
@@ -91,7 +105,7 @@ describe("credential validation and refresh", () => {
   it("rejects replacing an existing account with another client", async () => {
     const p = await pairing(); await importChatGptPlan(p.capability, await credentials(p.nonce));
     const q = await pairing(); const c = await credentials(q.nonce, { idAudience: "oaiapp_other", accessClient: "oaiapp_other" }); c.clientId = "oaiapp_other";
-    await expect(importChatGptPlan(q.capability, c)).rejects.toThrow("Disconnect before connecting another account");
+    await expect(importChatGptPlan(q.capability, c)).rejects.toThrow("This installation is registered to another ChatGPT account");
     expect((await getChatGptPlanView()).connected).toBe(true);
   });
   it("revokes a session and clears credentials on disconnect", async () => {
@@ -102,6 +116,20 @@ describe("credential validation and refresh", () => {
     expect((await getChatGptPlanView()).connected).toBe(false);
     expect(new URLSearchParams(new URL(await createChatGptPlanPairing("https://example.com")).hash.slice(1)).get("clientId")).toBe("oaiapp_test");
     expect(await readFile(path.join(dir, "chatgpt-plan", "credentials.json"), "utf8")).not.toContain("refresh-1");
+  });
+  it("forgets retained registration and model when all data is deleted", async () => {
+    const p = await pairing(); await importChatGptPlan(p.capability, await credentials(p.nonce));
+    const { saveChatGptPlanPreferences } = await import("./index");
+    await saveChatGptPlanPreferences({ model: "example-model" });
+    const file = path.join(dir, "chatgpt-plan", "credentials.json");
+    const originalHostId = JSON.parse(await readFile(file, "utf8")).hostId;
+    await disconnectChatGptPlan({ forgetRegistration: true });
+    const state = JSON.parse(await readFile(file, "utf8"));
+    expect(state.hostId).toBe(originalHostId);
+    expect(state.registration).toBeUndefined();
+    expect(state.credential).toBeUndefined();
+    expect(state.model).toBeNull();
+    expect(new URLSearchParams(new URL(await createChatGptPlanPairing("https://example.com")).hash.slice(1)).has("clientId")).toBe(false);
   });
   it("clears local credentials if remote revocation fails", async () => {
     const p = await pairing(); await importChatGptPlan(p.capability, await credentials(p.nonce));

@@ -139,7 +139,7 @@ export function ChatGptPlanSection({ initial, apiInitial }: { initial: ChatGptPl
         {pending && <p role="status" className="text-sm text-muted">Waiting for sign-in to finish…</p>}
         {view.connected && <Button variant="secondary" disabled={busy} onClick={() => void disconnect()}>Disconnect account</Button>}
       </>}
-      <p className="text-sm text-muted">A ChatGPT plan does not provide JSearch or Adzuna credentials. Find Jobs and the Agent need a separate job source configured in Jobs settings.</p>
+      <p className="text-sm text-muted">A ChatGPT plan does not provide JSearch or Adzuna credentials. Find Jobs and the Agent need a separate job source configured in Jobs settings. <a href="https://github.com/grigoryshutko/dossier/tree/feat/chatgpt-plan-sign-in" target="_blank" rel="noreferrer" className="underline">Source code for this modified version</a>.</p>
     </Card>}
   </>;
 }

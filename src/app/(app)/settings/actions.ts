@@ -238,7 +238,7 @@ export const deleteEverything = action(z.object({ confirm: z.literal("DELETE") }
   for (const job of unfinished) await cancelJob(job.id);
   // Revokes Dossier's access at Google too (E15-1).
   await disconnectGoogle().catch(() => {});
-  await disconnectChatGptPlan();
+  await disconnectChatGptPlan({ forgetRegistration: true });
 
   await prisma.$transaction(async (tx) => {
     await tx.job.deleteMany();
