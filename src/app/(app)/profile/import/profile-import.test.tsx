@@ -1,5 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { hydrateRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { toast } from "@/components/toast";
@@ -86,6 +88,29 @@ describe("ProfileImport (E4-10)", () => {
     expect(fetch).toHaveBeenCalledWith("/api/profile/import", expect.objectContaining({ method: "POST", body: file }));
     expect(router.replace).toHaveBeenCalledWith("/profile/import?job=job-1");
     expect(screen.getByRole("heading", { name: "Reading your resume…" })).toBeInTheDocument();
+  });
+
+  it("keeps a file selected before hydration and sends it", async () => {
+    const user = userEvent.setup();
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(Response.json({ jobId: "job-1" }));
+    const component = <ProfileImport keptFor="24 hours" aiReady provider="LOCAL" initialJobId={null} />;
+    const container = document.createElement("div");
+    container.innerHTML = renderToString(component);
+    document.body.appendChild(container);
+    const file = new File(["%PDF-"], "resume.pdf", { type: "application/pdf" });
+    await user.upload(screen.getByLabelText("Your resume, as PDF, Word (.docx) or Markdown (.md)"), file);
+
+    let root!: ReturnType<typeof hydrateRoot>;
+    await act(async () => { root = hydrateRoot(container, component); });
+    try {
+      const button = screen.getByRole("button", { name: "Read my resume →" });
+      expect(button).not.toHaveAttribute("aria-disabled", "true");
+      await user.click(button);
+      expect(fetch).toHaveBeenCalledWith("/api/profile/import", expect.objectContaining({ method: "POST", body: file }));
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
   });
 
   it("shows why a file can't be read", async () => {

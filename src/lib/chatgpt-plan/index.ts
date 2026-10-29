@@ -68,7 +68,7 @@ async function locked<T>(fn: (s: State) => Promise<T>): Promise<T> {
   try { return await fn(await read()); } finally { await rm(lock, { recursive: true, force: true }); }
 }
 function view(s: State): ChatGptPlanView { return { connected: !!s.credential, planAuthorized: !!s.credential && s.credential.scopes.includes(planScope) && !!s.credential.refreshToken, enabled: s.enabled, email: s.credential?.email ?? null, model: s.model, allowBackground: s.allowBackground, needsReauth: s.needsReauth }; }
-export async function getChatGptPlanView() { return locked(async s => view(s)); }
+export async function getChatGptPlanView() { return view(await read()); }
 export async function createChatGptPlanPairing(origin: string) {
   return locked(async s => { const capability = secret(); const nonce = secret(); s.pending = { hash: hash(capability), nonce, expiresAt: Date.now() + 10 * 60_000 }; await write(s); const url = new URL("http://127.0.0.1:1455/"); url.hash = new URLSearchParams({ origin, capability, nonce, ...((s.credential || s.registration) ? { clientId: (s.credential || s.registration)!.clientId, vmHostId: s.hostId } : {}) }).toString(); return url.toString(); });
 }

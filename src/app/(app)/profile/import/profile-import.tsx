@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { PageHeader } from "@/components/page-header";
 import { toast, toastResult } from "@/components/toast";
@@ -63,6 +63,10 @@ export function ProfileImport({
   const [confirmReplace, setConfirmReplace] = useState(false);
   const job = useJob<ImportProfileResult>(jobId, revision);
   const fileId = useId();
+  // The browser can accept a file before React hydrates the server-rendered input.
+  const attachFileInput = useCallback((input: HTMLInputElement | null) => {
+    if (input) setFile(input.files?.[0] ?? null);
+  }, []);
 
   const phase = !jobId ? "choose" : job?.status === "DONE" && job.result ? "preview" : "reading";
 
@@ -146,6 +150,7 @@ export function ProfileImport({
                 Your resume, as PDF, Word (.docx) or Markdown (.md)
               </label>
               <input
+                ref={attachFileInput}
                 id={fileId}
                 type="file"
                 accept=".pdf,.docx,.md,.markdown,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/markdown,text/plain"

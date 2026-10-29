@@ -24,6 +24,10 @@ async function pairing() { const url = new URL(await createChatGptPlanPairing("h
 beforeEach(async () => { vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 200 }))); const pair = await generateKeyPair("RS256"); privateKey = pair.privateKey as CryptoKey; const jwk = await exportJWK(pair.publicKey); jwk.kid = "test"; keyState.resolve = createLocalJWKSet({ keys: [jwk] }) as unknown as typeof keyState.resolve; dir = await mkdtemp(path.join(tmpdir(), "dossier-plan-")); process.env.DOSSIER_DATA_DIR = dir; });
 afterEach(async () => { delete process.env.DOSSIER_DATA_DIR; vi.unstubAllGlobals(); await rm(dir, { recursive: true, force: true }); });
 describe("ChatGPT plan pairing", () => {
+  it("reads a fresh status without creating a credentials directory", async () => {
+    await expect(getChatGptPlanView()).resolves.toMatchObject({ connected: false });
+    await expect(stat(path.join(dir, "chatgpt-plan"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
   it("stores a stable VM host and never stores the pairing capability", async () => {
     const url = new URL(await createChatGptPlanPairing("https://example.com"));
     const capability = new URLSearchParams(url.hash.slice(1)).get("capability")!;
@@ -59,7 +63,7 @@ describe("ChatGPT plan pairing", () => {
     const lock = path.join(dir, "chatgpt-plan", ".lock");
     await mkdir(lock, { recursive: true }); await writeFile(path.join(lock, "pid"), "2147483647");
     const past = new Date(Date.now() - 60_000); await utimes(lock, past, past);
-    await expect(getChatGptPlanView()).resolves.toMatchObject({ connected: false });
+    await expect(createChatGptPlanPairing("https://example.com")).resolves.toContain("127.0.0.1:1455");
   });
   it("cancellation invalidates a pending transfer without disconnecting the account", async () => {
     const first = await pairing(); await importChatGptPlan(first.capability, await credentials(first.nonce));
