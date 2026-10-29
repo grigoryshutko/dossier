@@ -208,7 +208,7 @@ async function aboutFacts(): Promise<AboutFacts> {
     { label: "Server", value: host },
     { label: "Database", value: `PostgreSQL · ${formatBytes(Number(database.size))}` },
     { label: "Sign-in", value: "set via DOSSIER_PASSWORD" },
-    { label: "AI", value: [providerOption(ai.provider).name, ai.model].filter(Boolean).join(" · ") },
+    { label: "AI", value: [ai.authSource === "chatgpt-plan" ? "ChatGPT plan" : providerOption(ai.provider).name, ai.model].filter(Boolean).join(" · ") },
     { label: "Applications", value: String(applications) },
   ];
 }
