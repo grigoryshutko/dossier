@@ -9,6 +9,7 @@ import { isAiConfigured } from "@/lib/ai/config";
 import { AiError } from "@/lib/ai/errors";
 import { loadTaskOptions } from "@/lib/ai/task-options";
 import { scorePosting } from "@/lib/ai/tasks";
+import { getChatGptPlanView } from "@/lib/chatgpt-plan";
 import { searchPostings } from "@/lib/job-search";
 import { credentialsFor, loadJobSearchConfig, requestContext } from "@/lib/job-search/config";
 import { JobSearchError } from "@/lib/job-search/errors";
@@ -100,6 +101,10 @@ const newestFirst = (a: FoundPosting, b: FoundPosting) => (b.postedAt ? Date.par
 export async function runAgentScan({ manual }: { manual: boolean }, context: JobContext, now = new Date()): Promise<AgentScanResult> {
   const settings = await loadSettings();
   if (!settings.agentEnabled && !manual) return stopped("The job agent is off.");
+  if (!manual) {
+    const plan = await getChatGptPlanView();
+    if (plan.enabled && (!plan.connected || !plan.planAuthorized || plan.needsReauth || !plan.allowBackground)) return stopped("Scheduled AI work is paused. Allow background ChatGPT plan use or reconnect in Settings → AI connection.");
+  }
   const setup = await agentSetupProblem(settings.agentQuery);
   if (setup) return stopped(setup);
   const limit = runLimitProblem(settings.agentRuns, now, { manual: false });
@@ -166,7 +171,7 @@ export async function runAgentScan({ manual }: { manual: boolean }, context: Job
       take: settings.agentMaxDrafts,
       select: { id: true },
     });
-    for (const { id } of best) await startJob(agentDraftJob, { candidateId: id }, { key: draftJobKey(id) });
+    for (const { id } of best) await startJob(agentDraftJob, { candidateId: id, ...(manual ? {} : { background: true }) }, { key: draftJobKey(id) });
     drafted = best.length;
   }
 

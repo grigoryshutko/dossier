@@ -21,6 +21,8 @@ export async function proxy(request: NextRequest) {
   // The Claude connector (#221) brings its own credentials, an OAuth token,
   // which its routes check; they answer 404 while it's off.
   if (CONNECTOR_PATHS.test(pathname)) return NextResponse.next();
+  // One-use, ten-minute pairing capability authenticates the local helper.
+  if (pathname === "/api/chatgpt-plan/import" && request.method === "POST") return NextResponse.next();
 
   const session = await decodeSession(
     request.cookies.get(SESSION_COOKIE)?.value,

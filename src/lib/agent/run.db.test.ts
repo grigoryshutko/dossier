@@ -12,6 +12,8 @@ import { MockProvider } from "../ai/providers/mock";
 import { agentDedupeKey } from "./candidates";
 import { runAgentScan } from "./run";
 
+const plan = vi.hoisted(() => ({ enabled: false, connected: true, planAuthorized: true, needsReauth: false, allowBackground: true }));
+vi.mock("@/lib/chatgpt-plan", () => ({ getChatGptPlanView: async () => ({ ...plan }) }));
 const db = vi.hoisted(() => ({ client: undefined as ReturnType<typeof createTestClient> | undefined }));
 vi.mock("@/lib/prisma", async () => {
   const { createTestClient } = await import("@/test/db");
@@ -102,11 +104,23 @@ const context = (abort?: AbortController): JobContext & { steps: string[] } => {
 };
 
 beforeEach(async () => {
+  Object.assign(plan, { enabled: false, connected: true, planAuthorized: true, needsReauth: false, allowBackground: true });
   await resetDatabase(prisma());
   Object.assign(fake, { postings: page, searches: 0, source: "JSEARCH", ai: true, failOn: null, onScore: () => {} });
   await saveSettings({ agentEnabled: true, agentQuery: query });
 });
 afterAll(() => prisma().$disconnect());
+
+it("pauses scheduled scans without searching or recording a run when plan consent is off", async () => {
+  Object.assign(plan, { enabled: true, allowBackground: false });
+  const result = await runAgentScan({ manual: false }, context(), now);
+  expect(result.message).toContain("paused");
+  expect(fake.searches).toBe(0);
+  expect((await loadSettings()).agentRuns).toEqual([]);
+  await runAgentScan({ manual: true }, context(), now);
+  expect(fake.searches).toBe(1);
+});
+
 
 describe("runAgentScan (E16-3)", () => {
   it("searches once, scores the new postings and keeps them, below the minimum too", async () => {

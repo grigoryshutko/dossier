@@ -6,6 +6,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { JobStatus } from "@/generated/prisma/enums";
 import { loadAiConfig } from "@/lib/ai/config";
 import { AiError } from "@/lib/ai/errors";
+import { withAiBackgroundExecution, withAiUserExecution } from "@/lib/ai/execution";
 import { providerOption } from "@/lib/ai/provider-options";
 import { logServerError } from "@/lib/log";
 import { prisma } from "@/lib/prisma";
@@ -34,6 +35,8 @@ export type JobDefinition<I, R> = {
    * write its data idempotently (upsert, or replace in one transaction).
    */
   run: (input: I, context: JobContext) => Promise<R>;
+  /** Whether this persisted input describes unattended AI work. */
+  isBackground?: (input: I) => boolean;
 };
 
 /** What a page learns about a job. */
@@ -233,7 +236,8 @@ async function execute(id: string, controller: AbortController): Promise<void> {
     const definition = state.definitions.get(job.type);
     if (!definition) throw new Error(`No job type "${job.type}" is defined.`);
 
-    const result = await definition.run(definition.input.parse(job.input), {
+    const input = definition.input.parse(job.input);
+    const run = () => definition.run(input, {
       id,
       signal: controller.signal,
       step: async (name) => {
@@ -243,6 +247,7 @@ async function execute(id: string, controller: AbortController): Promise<void> {
         else await notify(id);
       },
     });
+    const result = definition.isBackground?.(input) ? await withAiBackgroundExecution(run) : await withAiUserExecution(run);
     await finish(id, { status: JobStatus.DONE, result: definition.result.parse(result) as Prisma.InputJsonValue });
   } catch (error) {
     // AI failures already say what to do; anything else is logged and kept vague.

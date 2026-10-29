@@ -24,7 +24,8 @@ import { USAGE_PING_HOST, usagePingChoice } from "@/lib/usage-ping";
 
 import { AgentSection } from "./agent-section";
 import { AiBehaviour } from "./ai-behaviour";
-import { AiProviderSection } from "./ai-provider-section";
+import { ChatGptPlanSection } from "./chatgpt-plan-section";
+import { getChatGptPlanView } from "@/lib/chatgpt-plan";
 import { DataSection } from "./data-section";
 import { DocumentsSection } from "./documents-section";
 import { GoogleSection } from "./google-section";
@@ -47,7 +48,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
     <SettingsScreen section={section}>
       {section === "ai" ? (
         <>
-          <AiProviderSection initial={await loadAiSettingsView()} />
+          <ChatGptPlanSection initial={await getChatGptPlanView()} apiInitial={await loadAiSettingsView()} />
           <AiBehaviour initial={{ creativity: settings.creativity, strict: settings.strict, showDiff: settings.showDiff }} />
         </>
       ) : section === "jobs" ? (
@@ -207,7 +208,7 @@ async function aboutFacts(): Promise<AboutFacts> {
     { label: "Server", value: host },
     { label: "Database", value: `PostgreSQL · ${formatBytes(Number(database.size))}` },
     { label: "Sign-in", value: "set via DOSSIER_PASSWORD" },
-    { label: "AI", value: [providerOption(ai.provider).name, ai.model].filter(Boolean).join(" · ") },
+    { label: "AI", value: [ai.authSource === "chatgpt-plan" ? "ChatGPT plan" : providerOption(ai.provider).name, ai.model].filter(Boolean).join(" · ") },
     { label: "Applications", value: String(applications) },
   ];
 }

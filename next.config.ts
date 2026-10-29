@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   // playwright-core reads some of its own files by computed paths, which the
   // tracing can't follow (browsers.json for one), so all of it goes along.
-  outputFileTracingIncludes: { "/**": ["./node_modules/playwright-core/**/*"] },
+  outputFileTracingIncludes: { "/**": ["./node_modules/playwright-core/**/*"], "/api/chatgpt-plan/helper": ["./scripts/chatgpt-login.mjs"] },
   logging: {
     // In development, Next.js logs every Server Action call with its
     // arguments, which would print the sign-in password (AUTH-1), API keys

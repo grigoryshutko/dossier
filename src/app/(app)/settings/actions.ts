@@ -12,6 +12,7 @@ import { keyStateOf, loadAiConfig, resolveAiConfig } from "@/lib/ai/config";
 import type { KeyState } from "@/lib/ai/provider-options";
 import { DOCUMENT_LANGUAGES } from "@/lib/document-language";
 import { deleteAllBackups } from "@/lib/backups";
+import { disconnectChatGptPlan } from "@/lib/chatgpt-plan";
 import { env } from "@/lib/env";
 import { JobSearchError, testSource } from "@/lib/job-search";
 import { credentialsFor, jobSearchView, loadJobSearchConfig, requestContext } from "@/lib/job-search/config";
@@ -237,6 +238,7 @@ export const deleteEverything = action(z.object({ confirm: z.literal("DELETE") }
   for (const job of unfinished) await cancelJob(job.id);
   // Revokes Dossier's access at Google too (E15-1).
   await disconnectGoogle().catch(() => {});
+  await disconnectChatGptPlan({ forgetRegistration: true });
 
   await prisma.$transaction(async (tx) => {
     await tx.job.deleteMany();

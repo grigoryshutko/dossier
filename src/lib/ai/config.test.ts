@@ -1,12 +1,28 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { encryptApiKey } from "./api-key";
-import { isAiUsable, resolveAiConfig } from "./config";
+import { isAiUsable, loadAiConfig, resolveAiConfig } from "./config";
 import { AiError } from "./errors";
 import { createProvider } from "./index";
 
 vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "a".repeat(32) } }));
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
+const plan = vi.hoisted(() => ({ enabled: false, connected: false, model: null as string | null, needsReauth: false }));
+vi.mock("@/lib/chatgpt-plan", () => ({ getChatGptPlanView: async () => plan }));
+
+describe("ChatGPT plan routing", () => {
+  it("selects the plan without using an API key, and fails closed on reauthorization", async () => {
+    plan.enabled = true; plan.connected = true; plan.model = "account-model";
+    try {
+      const config = await loadAiConfig();
+      expect(config).toMatchObject({ authSource: "chatgpt-plan", model: "account-model", apiKey: null });
+      expect(createProvider(config).model).toBe("account-model");
+      plan.needsReauth = true;
+      expect(() => createProvider({ ...config, apiKeyProblem: "Reconnect your ChatGPT plan in Settings." })).toThrow("Reconnect");
+      expect(await isAiUsable()).toBe(false);
+    } finally { plan.enabled = false; plan.connected = false; plan.model = null; plan.needsReauth = false; }
+  });
+});
 const saved = vi.hoisted(() => ({ settings: { provider: null, baseUrl: null, model: null, apiKeyEnc: null } as Record<string, unknown> }));
 vi.mock("@/lib/settings-data", () => ({ loadSettings: async () => saved.settings }));
 

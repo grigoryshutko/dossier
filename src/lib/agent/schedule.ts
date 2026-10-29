@@ -2,6 +2,7 @@ import "server-only";
 
 import { AgentCandidateStatus } from "@/generated/prisma/enums";
 import { addDays, dayOf } from "@/lib/calendar-view";
+import { getChatGptPlanView } from "@/lib/chatgpt-plan";
 import { zonedTime } from "@/lib/google/slots";
 import { findUnfinishedJobs, startJob } from "@/lib/jobs/runner";
 import { logServerError } from "@/lib/log";
@@ -49,6 +50,8 @@ export function nextAgentRun(now: Date, hour: number, timeZone: string, runs: re
 export async function startDueRun(now = new Date()): Promise<string | null> {
   const settings = await loadSettings();
   if (!settings.agentEnabled) return null;
+  const plan = await getChatGptPlanView();
+  if (plan.enabled && (!plan.connected || !plan.planAuthorized || plan.needsReauth || !plan.allowBackground)) return null;
   if (!scheduledRunDue(now, settings.agentHour, await lastKnownTimeZone(), settings.agentRuns)) return null;
   if ((await findUnfinishedJobs(AGENT_JOB_KEY)).length > 0) return null;
   return startJob(agentScanJob, { manual: false }, { key: AGENT_JOB_KEY });

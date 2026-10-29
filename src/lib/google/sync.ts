@@ -5,6 +5,8 @@ import { z } from "zod";
 import { ApplicationStatus, DocumentKind, EmailDirection } from "@/generated/prisma/enums";
 import { getAiProvider } from "@/lib/ai";
 import { isAiConfigured } from "@/lib/ai/config";
+import { isAiBackgroundExecution, withAiBackgroundExecution } from "@/lib/ai/execution";
+import { getChatGptPlanView } from "@/lib/chatgpt-plan";
 import { loadTaskOptions } from "@/lib/ai/task-options";
 import { classifyReply } from "@/lib/ai/tasks";
 import { unitsSchema } from "@/lib/application-data";
@@ -75,7 +77,7 @@ export async function syncInbox({ signal }: { signal?: AbortSignal } = {}): Prom
   if (!account) throw new GoogleError("not-connected", "Connect your Google account in Settings → Google first.");
   try {
     const result = await runSync(account.historyId, account.email, settings.gmailScope, signal);
-    await prisma.googleAccount.update({ where: { id: account.id }, data: { lastSyncAt: new Date(), syncProblem: null, historyId: result.historyId } });
+    await prisma.googleAccount.update({ where: { id: account.id }, data: { lastSyncAt: new Date(), syncProblem: result.problem ?? (result.counts.fetched === 0 && account.syncProblem?.startsWith("Mail was fetched, but automatic AI reading is paused.") ? account.syncProblem : null), historyId: result.historyId } });
     return result.counts;
   } catch (error) {
     logServerError("inbox check", error instanceof GoogleError && error.detail ? new GoogleError(error.problem, `${error.message} (${error.detail})`) : error);
@@ -101,7 +103,7 @@ async function runSync(historyId: string | null, ownAddress: string, scope: "kno
   const seen = new Set((await prisma.emailMessage.findMany({ where: { gmailId: { in: ids } }, select: { gmailId: true } })).map((entry) => entry.gmailId));
   const fresh = ids.filter((id) => !seen.has(id));
   const counts = { fetched: fresh.length, kept: 0, read: 0 };
-  if (fresh.length === 0) return { historyId: next, counts };
+  if (fresh.length === 0) return { historyId: next, counts, problem: null };
 
   const [applications, threads, aiReady] = await Promise.all([matchables(), knownThreads(), isAiConfigured()]);
   const kept: string[] = [];
@@ -146,19 +148,34 @@ async function runSync(historyId: string | null, ownAddress: string, scope: "kno
     if (!outgoing) kept.push(created.id);
   }
 
+  let problem: string | null = null;
   if (aiReady) {
     for (const id of kept) {
       if (signal?.aborted) break;
       try {
+        if (isAiBackgroundExecution()) {
+          const plan = await getChatGptPlanView();
+          if (plan.enabled && (!plan.allowBackground || !plan.connected || plan.needsReauth)) {
+            problem = "Mail was fetched, but automatic AI reading is paused. Allow background ChatGPT plan use in Settings or read messages manually.";
+            break;
+          }
+        }
         await readReply(id, signal);
         counts.read++;
       } catch (error) {
         // Left unread; "Read again" in the inbox tries once more.
+        if (isAiBackgroundExecution()) {
+          const plan = await getChatGptPlanView();
+          if (plan.enabled && (!plan.allowBackground || !plan.connected || plan.needsReauth)) {
+            problem = "Mail was fetched, but automatic AI reading is paused. Allow background ChatGPT plan use in Settings or read messages manually.";
+            break;
+          }
+        }
         logServerError("reading a reply", error);
       }
     }
   }
-  return { historyId: next, counts };
+  return { historyId: next, counts, problem };
 }
 
 /** Has the AI read a kept mail: what it is, what it asks, and the status it suggests. */
@@ -208,7 +225,7 @@ async function scheduledCheck(): Promise<void> {
   try {
     // Interviews moved or deleted in Google Calendar, whether or not mail is read.
     await pullInterviewEvents().catch((error) => logServerError("calendar check", error));
-    if (connection.canRead && settings.gmailRead) await syncInbox();
+    if (connection.canRead && settings.gmailRead) await withAiBackgroundExecution(() => syncInbox());
   } finally {
     globalForSync.inboxRunning = false;
   }

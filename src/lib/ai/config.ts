@@ -3,6 +3,7 @@ import "server-only";
 import { AiProvider } from "@/generated/prisma/enums";
 import { env, type Env } from "@/lib/env";
 import { loadSettings } from "@/lib/settings-data";
+import { getChatGptPlanView } from "@/lib/chatgpt-plan";
 
 import { API_KEY_UNREADABLE, ApiKeyUnreadable, apiKeyState, decryptApiKey } from "./api-key";
 import type { AiSettingsView, KeyState } from "./provider-options";
@@ -11,6 +12,7 @@ import type { AiSettingsView, KeyState } from "./provider-options";
 // or else the DOSSIER_AI_* variables, or else the defaults below.
 
 export type AiConfig = {
+  authSource?: "chatgpt-plan";
   provider: AiProvider;
   baseUrl: string;
   model: string | null;
@@ -86,6 +88,13 @@ export function resolveAiConfig(saved: SavedSettings | null, source: AiEnv, secr
 
 /** The AI configuration in effect right now. */
 export async function loadAiConfig(): Promise<AiConfig> {
+  const plan = await getChatGptPlanView();
+  if (plan.enabled) return {
+    authSource: "chatgpt-plan", provider: AiProvider.OPENAI,
+    baseUrl: "https://api.openai.com/v1", model: plan.model, apiKey: null,
+    apiKeyProblem: plan.needsReauth ? "Reconnect your ChatGPT plan in Settings." : null,
+    timeoutMs: 120_000,
+  };
   return resolveAiConfig(await loadSettings(), env);
 }
 
@@ -112,6 +121,7 @@ export function keyStateOf(saved: { provider: AiProvider | null; apiKeyEnc: stri
 
 /** Whether an AI provider has been chosen, in Settings or with DOSSIER_AI_PROVIDER. */
 export async function isAiConfigured(): Promise<boolean> {
+  if ((await getChatGptPlanView()).enabled) return true;
   if (env.DOSSIER_AI_PROVIDER) return true;
   return Boolean((await loadSettings()).provider);
 }
