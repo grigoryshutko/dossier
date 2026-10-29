@@ -23,7 +23,7 @@ describe("local sign-in helper", () => {
     expect((await start()).hostname).toBe("auth.openai.com");
   });
   it("rejects a callback with incorrect state before exchanging the code", async () => {
-    const auth = await start(); expect(auth.searchParams.get("client_id")).toBe("dynamic_agent_client"); expect(auth.searchParams.get("nonce")).toBe("b".repeat(43)); expect(auth.searchParams.get("ext_agent_host_id")).toBe(await readFile(path.join(home, ".config", "dossier", "chatgpt-host-id"), "utf8"));
+    const auth = await start(); expect(auth.searchParams.get("client_id")).toBe("dynamic_agent_client"); expect(auth.searchParams.get("nonce")).toBe("b".repeat(43)); expect(auth.searchParams.get("ext_agent_host_id")).toBe(await readFile(path.join(home, "chatgpt-host-id"), "utf8"));
     const response = await fetch("http://127.0.0.1:1455/auth/callback?state=wrong&code=code&client_id=oaiapp_test"); expect(response.status).toBe(400);
   });
   it("uses the VM host ID for a later authorization", async () => {
