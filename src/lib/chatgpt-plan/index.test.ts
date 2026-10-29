@@ -35,6 +35,19 @@ describe("ChatGPT plan pairing", () => {
     expect(JSON.parse(await readFile(file, "utf8")).hostId).toBe(JSON.parse(first).hostId);
     expect((await getChatGptPlanView()).connected).toBe(false);
   });
+  it("uses the stable VM host ID only for subsequent authorizations", async () => {
+    const firstUrl = new URL(await createChatGptPlanPairing("https://example.com"));
+    const first = new URLSearchParams(firstUrl.hash.slice(1));
+    expect(first.has("vmHostId")).toBe(false);
+    await importChatGptPlan(first.get("capability")!, await credentials(first.get("nonce")!));
+    const state = JSON.parse(await readFile(path.join(dir, "chatgpt-plan", "credentials.json"), "utf8"));
+    const next = new URLSearchParams(new URL(await createChatGptPlanPairing("https://example.com")).hash.slice(1));
+    expect(next.get("clientId")).toBe("oaiapp_test");
+    expect(next.get("vmHostId")).toBe(state.hostId);
+    await disconnectChatGptPlan();
+    const afterDisconnect = new URLSearchParams(new URL(await createChatGptPlanPairing("https://example.com")).hash.slice(1));
+    expect(afterDisconnect.get("vmHostId")).toBe(state.hostId);
+  });
   it("consumes a capability once even for failed and concurrent imports", async () => {
     const url = new URL(await createChatGptPlanPairing("https://example.com"));
     const capability = new URLSearchParams(url.hash.slice(1)).get("capability")!;

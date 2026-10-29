@@ -64,11 +64,11 @@ const server = http.createServer(async (req,res) => {
     if (req.headers.origin !== 'http://127.0.0.1:1455' || attempt) return end(403,'Invalid request');
     let raw = ''; for await (const chunk of req) { raw += chunk; if (raw.length > 4096) return end(413,'Too large'); }
     try {
-      const p = JSON.parse(raw); if (!/^[A-Za-z0-9_-]{43}$/.test(p.capability) || !/^[A-Za-z0-9_-]{43}$/.test(p.nonce) || (p.clientId && !/^oaiapp_[A-Za-z0-9_-]+$/.test(p.clientId))) throw Error();
+      const p = JSON.parse(raw); if (!/^[A-Za-z0-9_-]{43}$/.test(p.capability) || !/^[A-Za-z0-9_-]{43}$/.test(p.nonce) || (p.clientId && !/^oaiapp_[A-Za-z0-9_-]+$/.test(p.clientId)) || (p.vmHostId !== undefined && (!p.clientId || typeof p.vmHostId !== 'string' || !/^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(p.vmHostId)))) throw Error();
       if (p.origin !== configuredOrigin) throw Error('Pairing origin does not match configured origin');
       const destination = await target(configuredOrigin); const state = rnd(), verifier = rnd();
       attempt = { destination, capability:p.capability, nonce:p.nonce, clientId:p.clientId, state, verifier, expires: Date.now()+600000 };
-      const auth = new URL(`${issuer}/api/accounts/authorize`); const params = { client_id:p.clientId || 'dynamic_agent_client', ext_agent_host_id:hostId, response_type:'code', redirect_uri:redirect, scope:scopes, resource, state, nonce:p.nonce, code_challenge_method:'S256', code_challenge:createHash('sha256').update(verifier).digest('base64url'), ...(p.clientId ? {} : {agent_name_hint:'Dossier (Grigory fork)'}) }; auth.search = new URLSearchParams(params).toString();
+      const auth = new URL(`${issuer}/api/accounts/authorize`); const params = { client_id:p.clientId || 'dynamic_agent_client', ext_agent_host_id:p.vmHostId || hostId, response_type:'code', redirect_uri:redirect, scope:scopes, resource, state, nonce:p.nonce, code_challenge_method:'S256', code_challenge:createHash('sha256').update(verifier).digest('base64url'), ...(p.clientId ? {} : {agent_name_hint:'Dossier (Grigory fork)'}) }; auth.search = new URLSearchParams(params).toString();
       res.writeHead(200, {'Content-Type':'application/json'}); return res.end(JSON.stringify({url:auth.toString()}));
     } catch { return end(400,'Invalid pairing'); }
   }
