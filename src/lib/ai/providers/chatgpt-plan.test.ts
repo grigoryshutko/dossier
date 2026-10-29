@@ -77,6 +77,33 @@ describe("ChatGptPlanProvider", () => {
     await expect(p.complete(call)).rejects.toMatchObject({ kind: "provider" });
     await expect(p.complete(call)).rejects.toMatchObject({ detail: "refusal" });
   });
+  it.each([
+    [401, "auth"],
+    [429, "rate-limited"],
+    [500, "provider"],
+  ] as const)("maps HTTP %i without exposing response messages", async (status, kind) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ error: { message: "private upstream text" } }, { status })));
+    const error = await new ChatGptPlanProvider("model", 5000).complete(call).catch(error => error);
+    expect(error).toMatchObject({ kind });
+    expect(error.message).not.toContain("private upstream text");
+  });
+  it("classifies plan quota errors in HTTP responses", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ error: { code: "subscription_sharing_usage_unavailable" } }, { status: 403 })));
+    await expect(new ChatGptPlanProvider("model", 5000).complete(call)).rejects.toMatchObject({ kind: "rate-limited", message: expect.stringContaining("plan usage limit") });
+  });
+  it("rejects missing bodies, invalid events, and partial frames", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response(null)).mockResolvedValueOnce(stream(["data: {bad}\n\n"])).mockResolvedValueOnce(stream(['data: {"type":"response.completed"}'])));
+    const p = new ChatGptPlanProvider("model", 5000);
+    for (let i = 0; i < 3; i++) await expect(p.complete(call)).rejects.toMatchObject({ kind: "provider" });
+  });
+  it("rejects malformed catalogs", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ data: [] })));
+    await expect(fetchChatGptPlanModels()).rejects.toMatchObject({ kind: "provider" });
+  });
+  it("rejects oversized SSE frames", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(stream(["data: " + "x".repeat(4 * 1024 * 1024)])));
+    await expect(new ChatGptPlanProvider("model", 5000).complete(call)).rejects.toMatchObject({ kind: "provider", detail: "Response event too large" });
+  });
   it("returns visible catalog models and labels in server order", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ models: [{ slug: "b", display_name: "B", visibility: "list" }, { slug: "hidden", display_name: "Hidden", visibility: "hide" }, { slug: "a", display_name: "A", visibility: "list" }] })));
     expect(await fetchChatGptPlanModels()).toEqual([{ id: "b", label: "B" }, { id: "a", label: "A" }]);

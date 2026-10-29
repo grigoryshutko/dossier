@@ -8,7 +8,7 @@ let child: ChildProcess;
 let home: string;
 beforeEach(async () => {
   home = await mkdtemp(path.join(tmpdir(), "dossier-helper-"));
-  child = spawn(process.execPath, ["scripts/chatgpt-login.mjs", "--dossier-origin", "http://127.0.0.1:3000"], { env: { ...process.env, HOME: home, CHATGPT_PLAN_ALLOW_INSECURE_DEV: "1" }, stdio: ["ignore", "pipe", "pipe"] });
+  child = spawn(process.execPath, ["scripts/chatgpt-login.mjs", "--dossier-origin", "http://127.0.0.1:3000"], { env: { ...process.env, DOSSIER_CHATGPT_HELPER_CONFIG_DIR: home, CHATGPT_PLAN_ALLOW_INSECURE_DEV: "1" }, stdio: ["ignore", "pipe", "pipe"] });
   await new Promise<void>((resolve, reject) => { child.stdout!.once("data", () => resolve()); child.once("error", reject); child.once("exit", code => reject(new Error(`helper exited ${code}`))); });
 });
 afterEach(async () => { if (child.exitCode === null && child.signalCode === null) { child.kill(); await new Promise(r => child.once("exit", r)); } await rm(home, { recursive: true, force: true }); });

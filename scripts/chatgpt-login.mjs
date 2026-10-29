@@ -20,7 +20,7 @@ const resource = 'https://api.openai.com/v1';
 const scopes = 'openid profile email offline_access resource.invoke chatgpt.tokens.use.direct';
 const rnd = () => randomBytes(32).toString('base64url');
 let attempt;
-const localDir = path.join(homedir(), '.config', 'dossier');
+const localDir = process.env.DOSSIER_CHATGPT_HELPER_CONFIG_DIR || path.join(homedir(), '.config', 'dossier');
 await mkdir(localDir, { recursive: true, mode: 0o700 });
 const hostFile = path.join(localDir, 'chatgpt-host-id');
 try { await writeFile(hostFile, `urn:uuid:${randomUUID()}`, { flag: 'wx', mode: 0o600 }); } catch (e) { if (e.code !== 'EEXIST') throw e; }
